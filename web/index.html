@@ -2,40 +2,205 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Primera versión del dashboard del Tacómetro Digital PIC II." />
-    <title>PIC II · Tacómetro básico</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f7f9" />
+    <meta name="description" content="Dashboard de monitoreo de RPM para el proyecto Tacómetro Digital PIC II." />
+    <meta property="og:title" content="PIC II · Tacómetro Digital" />
+    <meta property="og:description" content="Monitoreo de RPM en tiempo real para proyectos con ESP8266 o ESP32." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="__SITE_ORIGIN__/public/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PIC II · Tacómetro Digital" />
+    <meta name="twitter:description" content="Monitoreo de RPM en tiempo real para proyectos con ESP8266 o ESP32." />
+    <meta name="twitter:image" content="__SITE_ORIGIN__/public/og.png" />
+    <title>PIC II · Tacómetro Digital</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="page-shell">
-      <header>
-        <p class="eyebrow">PIC II · TACÓMETRO DIGITAL</p>
-        <h1>Monitoreo de RPM</h1>
-        <p>Primera versión del panel de pruebas.</p>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">PIC II · TACÓMETRO DIGITAL</p>
+          <h1>Monitoreo de RPM</h1>
+          <p class="subtitle">Lecturas en tiempo real del banco de pruebas</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="button button-secondary demo-button" id="demoToggle" type="button" aria-pressed="true">
+            <span class="button-dot"></span><span id="demoButtonLabel">Demo activo</span>
+          </button>
+          <button class="button button-primary" id="openConnectionModal" type="button">Conectar dispositivo</button>
+          <span class="connection-pill" id="generalConnection" role="status">
+            <span class="status-dot status-demo"></span><span>Simulación activa</span>
+          </span>
+        </div>
       </header>
 
-      <section class="card" aria-labelledby="motorTitle">
-        <div class="card-heading">
-          <div>
-            <p class="eyebrow">SENSOR SIMULADO</p>
-            <h2 id="motorTitle">Motor principal</h2>
+      <main>
+        <section class="summary-grid" aria-label="Resumen del sistema">
+          <article class="summary-card">
+            <span>Sensores detectados</span>
+            <strong id="summarySensors">0</strong>
+            <small id="summarySensorsHint">Esperando lecturas</small>
+          </article>
+          <article class="summary-card">
+            <span>Dispositivos conectados</span>
+            <strong id="summaryConnections">0</strong>
+            <small id="summaryConnectionsHint">Sin conexiones reales</small>
+          </article>
+          <article class="summary-card">
+            <span>RPM máxima global</span>
+            <strong><span id="summaryMaxRpm">—</span> <small>RPM</small></strong>
+            <small>En el período seleccionado</small>
+          </article>
+          <article class="summary-card">
+            <span>Estado del sistema</span>
+            <strong class="summary-status" id="summarySystemStatus">En espera</strong>
+            <small id="summarySystemHint">Activa la demo o conecta un dispositivo</small>
+          </article>
+        </section>
+
+        <section aria-labelledby="tachometersTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">SENSORES ACTIVOS</p>
+              <h2 id="tachometersTitle">Tacómetros</h2>
+            </div>
+            <div class="chart-controls" aria-label="Ajustes de la gráfica">
+              <label class="range-field" for="timeRange">
+                <span>Ventana</span>
+                <select id="timeRange">
+                  <option value="10s">Últimos 10 segundos</option>
+                  <option value="30s" selected>Últimos 30 segundos</option>
+                  <option value="1m">Último minuto</option>
+                  <option value="5m">Últimos 5 minutos</option>
+                  <option value="15m">Últimos 15 minutos</option>
+                  <option value="1h">Última hora</option>
+                  <option value="all">Desde el inicio</option>
+                </select>
+              </label>
+              <label class="range-field" for="samplePeriod">
+                <span>Muestreo</span>
+                <select id="samplePeriod">
+                  <option value="0">Cada lectura</option>
+                  <option value="250">Cada 250 ms</option>
+                  <option value="500">Cada 500 ms</option>
+                  <option value="1000" selected>Cada 1 segundo</option>
+                  <option value="2000">Cada 2 segundos</option>
+                  <option value="5000">Cada 5 segundos</option>
+                </select>
+              </label>
+              <button class="button button-secondary range-config-button" id="openRangeModal" type="button">Editar rangos RPM</button>
+            </div>
           </div>
-          <span class="status" id="status">En espera</span>
+
+          <div class="empty-state" id="emptyState" hidden>
+            <span class="empty-icon" aria-hidden="true">↗</span>
+            <h3>Todavía no hay lecturas</h3>
+            <p>Prueba la simulación o conecta un ESP8266/ESP32 para comenzar a monitorear RPM.</p>
+            <div class="empty-actions">
+              <button class="button button-primary" id="emptyDemoButton" type="button">Probar demo</button>
+              <button class="button button-secondary" id="emptyConnectButton" type="button">Conectar dispositivo</button>
+            </div>
+          </div>
+
+          <div class="tachometer-grid" id="tachometerGrid" aria-live="polite"></div>
+        </section>
+
+        <section class="connections-section" aria-labelledby="connectionsTitle">
+          <div class="connections-heading">
+            <div>
+              <p class="eyebrow">FUENTES DE DATOS</p>
+              <h2 id="connectionsTitle">Conexiones de dispositivos</h2>
+            </div>
+            <button class="text-button" id="addAnotherConnection" type="button">+ Añadir conexión</button>
+          </div>
+          <div class="connections-list" id="connectionsList"></div>
+        </section>
+
+        <footer class="project-footer">
+          <div>
+            <span>Proyecto Integrador de Competencias II</span>
+            <strong>Ingeniería Mecatrónica</strong>
+          </div>
+          <p>Eje / motor <b>→</b> Sensor Hall <b>→</b> ESP8266/ESP32 <b>→</b> Wi-Fi <b>→</b> Dashboard</p>
+        </footer>
+      </main>
+    </div>
+
+    <dialog class="modal" id="settingsModal" aria-labelledby="settingsTitle">
+      <form method="dialog" id="settingsForm">
+        <div class="modal-heading">
+          <div><p class="eyebrow">AJUSTES DEL SENSOR</p><h2 id="settingsTitle">Configurar tacómetro</h2></div>
+          <button class="close-button" type="button" data-close-dialog="settingsModal" aria-label="Cerrar">×</button>
         </div>
-
-        <div class="reading">
-          <strong id="rpmValue">0</strong>
-          <span>RPM</span>
+        <input type="hidden" id="settingsSensorId" />
+        <label class="field field-wide"><span>Nombre del motor</span><input id="settingsName" type="text" maxlength="60" autocomplete="off" required /></label>
+        <div class="form-grid">
+          <label class="field"><span>Bajas hasta</span><div class="input-unit"><input id="settingsLow" type="number" min="0" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Normal hasta</span><div class="input-unit"><input id="settingsNormal" type="number" min="1" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Altas hasta</span><div class="input-unit"><input id="settingsHigh" type="number" min="1" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Escala máxima</span><div class="input-unit"><input id="settingsScale" type="number" min="1" step="1" required /><b>RPM</b></div></label>
         </div>
+        <div class="range-preview" aria-label="Vista previa de rangos">
+          <span class="range-low">Bajas</span><span class="range-normal">Normal</span><span class="range-high">Altas</span><span class="range-danger">Peligro</span>
+        </div>
+        <p class="form-error" id="settingsError" role="alert"></p>
+        <div class="modal-actions">
+          <button class="button button-secondary" type="button" data-close-dialog="settingsModal">Cancelar</button>
+          <button class="button button-primary" value="default" type="submit">Guardar cambios</button>
+        </div>
+      </form>
+    </dialog>
 
-        <div class="meter" aria-hidden="true"><span id="meterFill"></span></div>
-        <p id="rangeText">Motor detenido</p>
+    <dialog class="modal" id="rangeModal" aria-labelledby="rangeTitle">
+      <form method="dialog" id="rangeForm">
+        <div class="modal-heading">
+          <div><p class="eyebrow">CONFIGURACIÓN GLOBAL</p><h2 id="rangeTitle">Rangos de RPM</h2></div>
+          <button class="close-button" type="button" data-close-dialog="rangeModal" aria-label="Cerrar">×</button>
+        </div>
+        <p class="modal-intro">Estos límites controlan los colores, las alertas y las referencias de la gráfica. Se aplicarán a todos los tacómetros actuales y a los sensores nuevos.</p>
+        <div class="form-grid">
+          <label class="field"><span>Bajas hasta</span><div class="input-unit"><input id="rangeLow" type="number" min="0" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Normal hasta</span><div class="input-unit"><input id="rangeNormal" type="number" min="1" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Altas hasta</span><div class="input-unit"><input id="rangeHigh" type="number" min="1" step="1" required /><b>RPM</b></div></label>
+          <label class="field"><span>Escala máxima</span><div class="input-unit"><input id="rangeScale" type="number" min="1" step="1" required /><b>RPM</b></div></label>
+        </div>
+        <div class="range-preview" aria-label="Vista previa de rangos">
+          <span class="range-low">Bajas</span><span class="range-normal">Normal</span><span class="range-high">Altas</span><span class="range-danger">Peligro</span>
+        </div>
+        <p class="form-error" id="rangeError" role="alert"></p>
+        <div class="modal-actions modal-actions-split">
+          <button class="text-button reset-ranges-button" id="resetRanges" type="button">Usar valores iniciales</button>
+          <div>
+            <button class="button button-secondary" type="button" data-close-dialog="rangeModal">Cancelar</button>
+            <button class="button button-primary" value="default" type="submit">Guardar y aplicar</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
 
-        <button id="toggleDemo" type="button">Iniciar simulación</button>
-      </section>
-    </main>
+    <dialog class="modal connection-modal" id="connectionModal" aria-labelledby="connectionTitle">
+      <form method="dialog" id="connectionForm">
+        <div class="modal-heading">
+          <div><p class="eyebrow">NUEVA FUENTE DE DATOS</p><h2 id="connectionTitle">Conectar dispositivo</h2></div>
+          <button class="close-button" type="button" data-close-dialog="connectionModal" aria-label="Cerrar">×</button>
+        </div>
+        <p class="modal-intro">Añade la dirección WebSocket del ESP8266 o ESP32. Puedes mantener varias conexiones activas al mismo tiempo.</p>
+        <label class="field field-wide"><span>Nombre</span><input id="connectionName" type="text" value="NodeMCU banco de pruebas" maxlength="60" required /></label>
+        <label class="field field-wide"><span>WebSocket</span><input id="connectionUrl" type="text" value="ws://192.168.1.105:81/" inputmode="url" spellcheck="false" required /><small>Para el firmware incluido: ws://dirección-ip:81/</small></label>
+        <div class="payload-example">
+          <span>Formato esperado</span>
+          <code>{ "device": "ESP8266-01", "sensor": "M1", "name": "Motor principal", "rpm": 2380 }</code>
+        </div>
+        <p class="form-error" id="connectionError" role="alert"></p>
+        <div class="modal-actions">
+          <button class="button button-secondary" type="button" data-close-dialog="connectionModal">Cancelar</button>
+          <button class="button button-primary" value="default" type="submit">Conectar</button>
+        </div>
+      </form>
+    </dialog>
 
-    <script type="module" src="js/app.js"></script>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./js/app.js"></script>
   </body>
 </html>
