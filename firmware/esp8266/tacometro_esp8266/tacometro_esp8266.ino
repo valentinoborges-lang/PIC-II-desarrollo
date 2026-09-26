@@ -3,13 +3,15 @@
 #include <ESP8266WiFi.h>
 #include <LiquidCrystal_I2C.h>
 #include <WebSocketsServer.h>
+#include <WiFiManager.h>
 #include <Wire.h>
 
 // -----------------------------------------------------------------------------
-// Configuración que debes personalizar
+// Identificación del equipo y portal de configuración Wi-Fi
 // -----------------------------------------------------------------------------
-const char* WIFI_SSID = "TU_RED_WIFI";
-const char* WIFI_PASSWORD = "TU_CONTRASENA";
+const char* PORTAL_WIFI_NOMBRE = "Tacometro-PIC-II";
+const char* PORTAL_WIFI_CLAVE = "tacometro123";
+constexpr unsigned long PORTAL_WIFI_TIMEOUT_S = 180;
 
 const char* DEVICE_ID = "ESP8266-01";
 const char* SENSOR_ID = "M1";
@@ -247,19 +249,26 @@ void revisarBotonCalibracion() {
 }
 
 void conectarWifi() {
-  escribirLineaLcd(0, "Conectando WiFi");
-  escribirLineaLcd(1, WIFI_SSID);
-
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFiManager wifiManager;
+  wifiManager.setConfigPortalTimeout(PORTAL_WIFI_TIMEOUT_S);
 
-  const unsigned long inicioConexion = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - inicioConexion < 15000) {
-    delay(250);
-    yield();
-  }
+  escribirLineaLcd(0, "Configurar WiFi");
+  escribirLineaLcd(1, PORTAL_WIFI_NOMBRE);
 
-  if (WiFi.status() == WL_CONNECTED) {
+  Serial.println(F("Si no hay una red guardada, conectate al portal:"));
+  Serial.print(F("Red: "));
+  Serial.println(PORTAL_WIFI_NOMBRE);
+  Serial.print(F("Clave: "));
+  Serial.println(PORTAL_WIFI_CLAVE);
+  Serial.println(F("Luego abre http://192.168.4.1"));
+
+  // Si ya existen credenciales guardadas, se conecta automaticamente.
+  // Si no, crea el portal indicado arriba para elegir la red desde el telefono.
+  const bool conectado =
+      wifiManager.autoConnect(PORTAL_WIFI_NOMBRE, PORTAL_WIFI_CLAVE);
+
+  if (conectado && WiFi.status() == WL_CONNECTED) {
     webSocket.begin();
     websocketIniciado = true;
 

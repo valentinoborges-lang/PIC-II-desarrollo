@@ -43,9 +43,20 @@ Mantén D8 en nivel bajo durante el arranque, porque GPIO15 es un pin de arranqu
 2. Selecciona **NodeMCU 1.0 (ESP-12E Module)**.
 3. Instala `LiquidCrystal I2C`.
 4. Instala `WebSockets` de Markus Sattler.
-5. Abre `tacometro_esp8266/tacometro_esp8266.ino`.
-6. Escribe el nombre y la contraseña de tu Wi-Fi.
+5. Instala `WiFiManager` de tzapu.
+6. Abre `tacometro_esp8266/tacometro_esp8266.ino`.
 7. Carga el programa y abre el monitor serie a 115200 baudios.
+
+## Configurar el Wi-Fi
+
+Las credenciales no se escriben en el programa. La primera vez que enciendas el tacómetro:
+
+1. Conecta el teléfono o la computadora a la red **Tacometro-PIC-II**.
+2. Usa la clave **tacometro123**.
+3. Si la página no se abre sola, visita `http://192.168.4.1`.
+4. Pulsa **Configure WiFi**, elige tu red e introduce su contraseña.
+
+El ESP8266 guardará esos datos y se conectará automáticamente en los siguientes encendidos. Si el portal no recibe la configuración en tres minutos, el tacómetro continúa funcionando en modo local.
 
 El monitor serie mostrará la IP. Para conectarlo al dashboard utiliza `ws://IP:81/`.
 
