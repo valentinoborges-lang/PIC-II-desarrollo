@@ -20,10 +20,9 @@ const char* SENSOR_NAME = "Motor principal";
 // Cambia este valor si usas más de un imán por vuelta.
 constexpr float PULSOS_POR_VUELTA = 1.0f;
 
-// Rangos locales para los LED y el buzzer.
-constexpr float RPM_BAJA_MAX = 1000.0f;
-constexpr float RPM_NORMAL_MAX = 2500.0f;
-constexpr float RPM_ALTA_MAX = 3500.0f;
+// Rango local de medicion. Una lectura con senal entre 0 y este limite es valida.
+constexpr float RPM_MAXIMA_VALIDA = 3500.0f;
+constexpr float HISTERESIS_RPM = 100.0f;
 
 // Debe coincidir con la velocidad real usada durante la calibración.
 constexpr float RPM_REFERENCIA_CALIBRACION = 1500.0f;
@@ -36,13 +35,16 @@ constexpr uint8_t PIN_LED_ROJO = D6;   // GPIO12
 constexpr uint8_t PIN_LED_AZUL = D7;   // GPIO13
 constexpr uint8_t PIN_LED_VERDE = D0;  // GPIO16
 constexpr uint8_t PIN_BUZZER = D8;     // GPIO15 - mantener LOW durante el arranque
-constexpr uint8_t PIN_BOTON_CAL = 3;   // RX / GPIO3 - pulsador hacia GND
+constexpr uint8_t PIN_BOTON_CAL = D3;  // GPIO0 - pulsador hacia GND
 
 constexpr uint8_t LCD_DIRECCION = 0x27;
 constexpr uint8_t WEBSOCKET_PUERTO = 81;
 constexpr unsigned long PERIODO_MEDICION_MS = 1000;
 constexpr unsigned long TIEMPO_SIN_SENAL_MS = 2500;
 constexpr unsigned long TIEMPO_PULSACION_CAL_MS = 1500;
+constexpr unsigned long ANTIRREBOTE_BOTON_MS = 40;
+constexpr unsigned long DURACION_PITIDO_MS = 170;
+constexpr unsigned long PAUSA_PITIDO_MS = 140;
 constexpr size_t CANTIDAD_MUESTRAS = 5;
 
 LiquidCrystal_I2C lcd(LCD_DIRECCION, 16, 2);
@@ -59,9 +61,27 @@ float rpmActual = 0.0f;
 
 unsigned long ultimaMedicionMs = 0;
 unsigned long ultimoPulsoDetectadoMs = 0;
+unsigned long inicioMedicionMs = 0;
 unsigned long inicioPulsacionMs = 0;
+unsigned long ultimoCambioBotonMs = 0;
 bool calibracionSolicitada = false;
+bool modoCalibracionActivo = false;
 bool websocketIniciado = false;
+bool evaluacionRangoHabilitada = false;
+bool sensorSinSenal = true;
+bool alarmaFueraDeRangoActiva = false;
+bool lecturaBotonAnterior = HIGH;
+bool estadoBotonEstable = HIGH;
+
+enum EstadoBuzzer : uint8_t {
+  BUZZER_REPOSO,
+  BUZZER_SONANDO,
+  BUZZER_PAUSA
+};
+
+EstadoBuzzer estadoBuzzer = BUZZER_REPOSO;
+uint8_t pitidosRestantes = 0;
+unsigned long cambioEstadoBuzzerMs = 0;
 
 constexpr uint32_t EEPROM_MAGIC = 0x54414348;  // "TACH"
 constexpr size_t EEPROM_TAMANO = 64;
@@ -113,29 +133,70 @@ void guardarCalibracion() {
   EEPROM.commit();
 }
 
-void actualizarIndicadores(float rpm) {
+void emitirPitidoInicial() {
+  tone(PIN_BUZZER, 2200);
+  delay(DURACION_PITIDO_MS);
+  noTone(PIN_BUZZER);
+  digitalWrite(PIN_BUZZER, LOW);
+}
+
+void iniciarSecuenciaBuzzer(uint8_t cantidad) {
+  if (cantidad == 0) return;
+
+  pitidosRestantes = cantidad;
+  estadoBuzzer = BUZZER_SONANDO;
+  cambioEstadoBuzzerMs = millis();
+  tone(PIN_BUZZER, 2200);
+}
+
+void actualizarSecuenciaBuzzer() {
+  const unsigned long ahoraMs = millis();
+
+  if (estadoBuzzer == BUZZER_SONANDO
+      && ahoraMs - cambioEstadoBuzzerMs >= DURACION_PITIDO_MS) {
+    noTone(PIN_BUZZER);
+    digitalWrite(PIN_BUZZER, LOW);
+    pitidosRestantes--;
+    cambioEstadoBuzzerMs = ahoraMs;
+    estadoBuzzer = pitidosRestantes > 0 ? BUZZER_PAUSA : BUZZER_REPOSO;
+  } else if (estadoBuzzer == BUZZER_PAUSA
+             && ahoraMs - cambioEstadoBuzzerMs >= PAUSA_PITIDO_MS) {
+    tone(PIN_BUZZER, 2200);
+    cambioEstadoBuzzerMs = ahoraMs;
+    estadoBuzzer = BUZZER_SONANDO;
+  }
+}
+
+void actualizarIndicadores() {
   bool verde = false;
   bool azul = false;
   bool rojo = false;
 
-  if (rpm > 0.0f && rpm <= RPM_BAJA_MAX) {
-    verde = true;
-  } else if (rpm <= RPM_NORMAL_MAX) {
-    azul = rpm > 0.0f;
-  } else {
-    rojo = true;
+  if (modoCalibracionActivo) {
+    azul = true;
+  } else if (evaluacionRangoHabilitada) {
+    bool fueraDeRango = sensorSinSenal;
+
+    if (!fueraDeRango) {
+      const float limiteRetorno = RPM_MAXIMA_VALIDA - HISTERESIS_RPM;
+      fueraDeRango = alarmaFueraDeRangoActiva
+        ? rpmActual > limiteRetorno
+        : rpmActual > RPM_MAXIMA_VALIDA;
+    }
+
+    verde = !fueraDeRango;
+    rojo = fueraDeRango;
+
+    if (fueraDeRango && !alarmaFueraDeRangoActiva) {
+      iniciarSecuenciaBuzzer(2);
+    }
+
+    alarmaFueraDeRangoActiva = fueraDeRango;
   }
 
   digitalWrite(PIN_LED_VERDE, verde ? HIGH : LOW);
   digitalWrite(PIN_LED_AZUL, azul ? HIGH : LOW);
   digitalWrite(PIN_LED_ROJO, rojo ? HIGH : LOW);
-
-  if (rpm > RPM_ALTA_MAX) {
-    tone(PIN_BUZZER, 2200, 180);
-  } else {
-    noTone(PIN_BUZZER);
-    digitalWrite(PIN_BUZZER, LOW);
-  }
 }
 
 float agregarAlPromedio(float rpm) {
@@ -171,16 +232,16 @@ void enviarRpm(float rpm) {
 void mostrarRpm(float rpm) {
   escribirLineaLcd(0, "RPM: " + String(rpm, 0));
 
-  if (rpm <= 0.0f) {
-    escribirLineaLcd(1, "Sin movimiento");
-  } else if (rpm <= RPM_BAJA_MAX) {
-    escribirLineaLcd(1, "Rango: BAJO");
-  } else if (rpm <= RPM_NORMAL_MAX) {
-    escribirLineaLcd(1, "Rango: NORMAL");
-  } else if (rpm <= RPM_ALTA_MAX) {
-    escribirLineaLcd(1, "Rango: ALTO");
+  if (modoCalibracionActivo) {
+    escribirLineaLcd(1, "CALIBRANDO...");
+  } else if (!evaluacionRangoHabilitada) {
+    escribirLineaLcd(1, "Esperando sensor");
+  } else if (sensorSinSenal) {
+    escribirLineaLcd(1, "SIN SENAL");
+  } else if (alarmaFueraDeRangoActiva) {
+    escribirLineaLcd(1, "FUERA DE RANGO");
   } else {
-    escribirLineaLcd(1, "PELIGRO RPM");
+    escribirLineaLcd(1, "Medicion VALIDA");
   }
 }
 
@@ -196,10 +257,18 @@ void medirRpm() {
   contadorPulsos = 0;
   interrupts();
 
-  if (pulsos > 0) ultimoPulsoDetectadoMs = ahoraMs;
+  if (pulsos > 0) {
+    ultimoPulsoDetectadoMs = ahoraMs;
+    evaluacionRangoHabilitada = true;
+  } else if (ahoraMs - inicioMedicionMs >= TIEMPO_SIN_SENAL_MS) {
+    evaluacionRangoHabilitada = true;
+  }
+
+  sensorSinSenal = evaluacionRangoHabilitada
+    && ahoraMs - ultimoPulsoDetectadoMs > TIEMPO_SIN_SENAL_MS;
 
   float rpmMedida = 0.0f;
-  if (pulsos > 0 || ahoraMs - ultimoPulsoDetectadoMs <= TIEMPO_SIN_SENAL_MS) {
+  if (pulsos > 0) {
     rpmMedida = (pulsos * 60000.0f / intervaloMs) / PULSOS_POR_VUELTA;
     rpmMedida *= factorCalibracion;
   }
@@ -207,7 +276,7 @@ void medirRpm() {
   rpmActual = agregarAlPromedio(rpmMedida);
   if (rpmActual < 0.5f) rpmActual = 0.0f;
 
-  actualizarIndicadores(rpmActual);
+  actualizarIndicadores();
   mostrarRpm(rpmActual);
   enviarRpm(rpmActual);
 
@@ -220,22 +289,48 @@ void medirRpm() {
 }
 
 void revisarBotonCalibracion() {
-  const bool presionado = digitalRead(PIN_BOTON_CAL) == LOW;
+  const bool lecturaActual = digitalRead(PIN_BOTON_CAL);
+  const unsigned long ahoraMs = millis();
 
-  if (presionado && inicioPulsacionMs == 0) {
-    inicioPulsacionMs = millis();
-    calibracionSolicitada = false;
+  if (lecturaActual != lecturaBotonAnterior) {
+    lecturaBotonAnterior = lecturaActual;
+    ultimoCambioBotonMs = ahoraMs;
   }
+
+  if (ahoraMs - ultimoCambioBotonMs < ANTIRREBOTE_BOTON_MS) return;
+
+  if (lecturaActual != estadoBotonEstable) {
+    estadoBotonEstable = lecturaActual;
+
+    if (estadoBotonEstable == LOW) {
+      inicioPulsacionMs = ahoraMs;
+      calibracionSolicitada = false;
+      modoCalibracionActivo = true;
+    } else {
+      inicioPulsacionMs = 0;
+      calibracionSolicitada = false;
+      modoCalibracionActivo = false;
+    }
+
+    actualizarIndicadores();
+  }
+
+  const bool presionado = estadoBotonEstable == LOW;
 
   if (presionado
       && !calibracionSolicitada
-      && millis() - inicioPulsacionMs >= TIEMPO_PULSACION_CAL_MS) {
+      && ahoraMs - inicioPulsacionMs >= TIEMPO_PULSACION_CAL_MS) {
     calibracionSolicitada = true;
 
     if (rpmActual > 10.0f) {
       factorCalibracion *= RPM_REFERENCIA_CALIBRACION / rpmActual;
       factorCalibracion = constrain(factorCalibracion, 0.1f, 10.0f);
       guardarCalibracion();
+
+      for (size_t i = 0; i < CANTIDAD_MUESTRAS; i++) historialRpm[i] = 0.0f;
+      indiceHistorial = 0;
+      muestrasDisponibles = 0;
+
       escribirLineaLcd(0, "Calibracion OK");
       escribirLineaLcd(1, "Factor " + String(factorCalibracion, 3));
       Serial.println(F("Calibracion guardada en EEPROM."));
@@ -244,8 +339,6 @@ void revisarBotonCalibracion() {
       escribirLineaLcd(1, "Motor detenido");
     }
   }
-
-  if (!presionado) inicioPulsacionMs = 0;
 }
 
 void conectarWifi() {
@@ -294,12 +387,14 @@ void setup() {
   pinMode(PIN_LED_AZUL, OUTPUT);
   pinMode(PIN_LED_VERDE, OUTPUT);
   pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_LED_ROJO, LOW);
+  digitalWrite(PIN_LED_AZUL, LOW);
+  digitalWrite(PIN_LED_VERDE, LOW);
   digitalWrite(PIN_BUZZER, LOW);
 
   Serial.begin(115200);
   delay(100);
 
-  // Se configura después de iniciar Serial para usar RX como GPIO del pulsador.
   pinMode(PIN_SENSOR_DO, INPUT_PULLUP);
   pinMode(PIN_BOTON_CAL, INPUT_PULLUP);
 
@@ -309,16 +404,21 @@ void setup() {
   escribirLineaLcd(0, "Tacometro PIC II");
   escribirLineaLcd(1, "Iniciando...");
 
+  // Un pitido confirma el inicio de la medicion.
+  emitirPitidoInicial();
+
   cargarCalibracion();
   conectarWifi();
 
   attachInterrupt(digitalPinToInterrupt(PIN_SENSOR_DO), registrarPulso, FALLING);
-  ultimaMedicionMs = millis();
-  ultimoPulsoDetectadoMs = millis() - TIEMPO_SIN_SENAL_MS;
+  inicioMedicionMs = millis();
+  ultimaMedicionMs = inicioMedicionMs;
+  ultimoPulsoDetectadoMs = inicioMedicionMs;
 }
 
 void loop() {
   if (websocketIniciado) webSocket.loop();
+  actualizarSecuenciaBuzzer();
   revisarBotonCalibracion();
   medirRpm();
   yield();

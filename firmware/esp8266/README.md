@@ -19,7 +19,7 @@ Código para **NodeMCU ESP8266 ESP-12E/ESP-12F**, sensor Hall **KY-024**, LCD 16
 | LED verde | Resistencia 220 Ω → ánodo | D0 | 16 |
 | Todos los LED | Cátodo | GND | — |
 | Buzzer | Control | D8 | 15 |
-| Pulsador | Un terminal | RX | 3 |
+| Pulsador | Un terminal | D3 | 0 |
 | Pulsador | Otro terminal | GND | — |
 
 ### Buzzer recomendado
@@ -34,6 +34,15 @@ No alimentes un buzzer de consumo elevado directamente desde el NodeMCU. Usa un 
 - Si el buzzer es electromagnético, coloca un diodo de protección en paralelo.
 
 Mantén D8 en nivel bajo durante el arranque, porque GPIO15 es un pin de arranque del ESP8266.
+
+No mantengas presionado el pulsador conectado a D3 mientras enciendes o reinicias el NodeMCU, porque GPIO0 selecciona el modo de programación durante el arranque.
+
+## Indicadores
+
+- LED verde: existe una medición válida dentro del rango local.
+- LED rojo: no se detecta la señal del sensor o la medición supera el rango permitido.
+- LED azul: permanece encendido mientras el botón de calibración está presionado.
+- Buzzer: un pitido al iniciar el tacómetro y dos pitidos al entrar en estado de alarma roja. Los dos pitidos no se repiten mientras continúe la misma alarma.
 
 \* Prueba primero el módulo LCD alimentado a 3,3 V y ajusta su potenciómetro de contraste. Si tu adaptador I²C necesita 5 V, utiliza un conversor bidireccional de nivel lógico en SDA y SCL; no conectes directamente al ESP8266 unas líneas I²C elevadas a 5 V.
 
@@ -63,7 +72,8 @@ El monitor serie mostrará la IP. Para conectarlo al dashboard utiliza `ws://IP:
 ## Ajustes principales
 
 - `PULSOS_POR_VUELTA`: cantidad de imanes o pulsos por cada vuelta completa.
-- `RPM_BAJA_MAX`, `RPM_NORMAL_MAX` y `RPM_ALTA_MAX`: límites usados por los LED y el buzzer.
+- `RPM_MAXIMA_VALIDA`: límite superior de la medición válida.
+- `HISTERESIS_RPM`: margen que evita cambios repetidos cerca del límite.
 - `RPM_REFERENCIA_CALIBRACION`: velocidad real conocida usada al mantener pulsado el botón.
 - `PERIODO_MEDICION_MS`: intervalo de cálculo y envío de datos.
 
