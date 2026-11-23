@@ -250,8 +250,8 @@ function seedDemoSensor(definition, count = 38) {
 
 function simulateDemoStep() {
   const definitions = [
-    { device: 'ESP8266-01', sensor: 'M1', name: 'Motor principal', base: 2300, variance: 420 },
-    { device: 'ESP8266-01', sensor: 'M2', name: 'Motor auxiliar', base: 1250, variance: 240 }
+    { device: 'ESP32-01', sensor: 'M1', name: 'Motor principal', base: 2300, variance: 420 },
+    { device: 'ESP32-01', sensor: 'M2', name: 'Motor auxiliar', base: 1250, variance: 240 }
   ];
   for (const definition of definitions) {
     const id = `${definition.device}::${definition.sensor}`;

@@ -1,53 +1,42 @@
-# Tacómetro Digital PIC II — desarrollo organizado
+# Tacómetro digital PIC II
 
-Este repositorio reorganiza un proyecto existente en tres hitos técnicos verificables. Las fechas de los commits corresponden a esta reconstrucción y no al comienzo original del proyecto.
+Proyecto de tacómetro portátil para medir sin contacto la velocidad de rotación de un eje. El prototipo final utiliza un ESP32 DevKit V1, un sensor Hall KY-024, una pantalla LCD 16×2, indicadores luminosos, buzzer y comunicación Wi-Fi.
 
-## Hitos completados
+## Funciones principales
 
-### Hito 1 — Dashboard básico
+- Conteo por interrupciones con un pulso por revolución.
+- Cálculo de RPM cada segundo y promedio móvil de cinco muestras.
+- Calibración a 1500 RPM con almacenamiento en EEPROM.
+- Detección de pérdida de señal.
+- Indicadores mediante LCD, tres LED y buzzer.
+- Configuración de Wi-Fi mediante portal cautivo.
+- Envío de lecturas JSON por WebSocket en el puerto 81.
+- Dashboard con históricos, estadísticas y rangos configurables.
 
-- Lectura de RPM simulada.
-- Indicador visual del rango de funcionamiento.
-- Servidor HTTP local sin dependencias externas.
-
-### Hito 2 — Dashboard de monitoreo completo
-
-- Históricos y estadísticas por sensor.
-- Rangos de RPM editables.
-- Período de muestreo configurable.
-- Varias conexiones WebSocket simultáneas.
-- Mensajes JSON compatibles con ESP8266 y ESP32.
-- Proceso de construcción para publicación.
-
-### Hito 3 — Circuito físico y comunicación
-
-- Firmware para NodeMCU ESP8266 ESP-12E/ESP-12F.
-- Lectura por interrupciones del sensor Hall KY-024.
-- LCD 16×2 mediante I²C.
-- LED verde, azul y rojo según las RPM.
-- Buzzer para el rango peligroso.
-- Pulsador de calibración y almacenamiento en EEPROM.
-- Servidor WebSocket en el puerto 81.
-
-## Organización final
+## Organización
 
 ```text
 .
-├── web/                         Dashboard y servidor local
-└── firmware/esp8266/            Circuito físico
-    └── tacometro_esp8266/
-        └── tacometro_esp8266.ino
+├── firmware/
+│   ├── esp32/                   Firmware del prototipo final
+│   │   └── tacometro_esp32/
+│   │       └── tacometro_esp32.ino
+│   └── esp8266/                 Versión anterior para NodeMCU
+│       └── tacometro_esp8266/
+│           └── tacometro_esp8266.ino
+└── web/                         Dashboard y servidor local
 ```
 
-Para ejecutarlo:
+Las conexiones y la preparación del entorno están detalladas en [`firmware/esp32/README.md`](firmware/esp32/README.md). La carpeta `firmware/esp8266` se conserva como referencia de la etapa anterior.
+
+## Dashboard
+
+Requiere Node.js 18 o posterior.
 
 ```bash
 cd web
+npm install
 npm run dev
 ```
 
-Abre `http://127.0.0.1:4173/`.
-
-Para conectar un dispositivo usa una dirección como `ws://192.168.1.105:81/`.
-
-Las conexiones del circuito y la preparación de Arduino IDE están explicadas en [`firmware/esp8266/README.md`](firmware/esp8266/README.md).
+El dashboard queda disponible en `http://127.0.0.1:4173/`. Para conectar el prototipo se utiliza una dirección WebSocket con el formato `ws://IP_DEL_ESP32:81/`.

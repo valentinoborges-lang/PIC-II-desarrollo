@@ -22,9 +22,9 @@ El resultado queda en `dist/`.
 
 ## Conectar el circuito
 
-1. Conecta la computadora y el NodeMCU a la misma red Wi-Fi.
-2. Lee en el monitor serie la dirección IP asignada al NodeMCU.
+1. Conecta la computadora y el ESP32 a la misma red Wi-Fi.
+2. Lee en el monitor serie la dirección IP asignada al ESP32.
 3. Pulsa **Conectar dispositivo** en el dashboard.
-4. Usa `ws://IP_DEL_ESP8266:81/`.
+4. Usa `ws://IP_DEL_ESP32:81/`.
 
 El firmware incluido transmite un mensaje JSON por segundo. El dashboard también ofrece modo demo, rangos de RPM editables y selección del período de muestreo de la gráfica.
